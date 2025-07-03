@@ -26,3 +26,6 @@ glow = "0.13.0"
 
 # For CLI later
 # clap = { version = "4.4", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3.10.1"

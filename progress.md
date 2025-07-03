@@ -121,3 +121,19 @@ This section outlines the initial thoughts on the Rust frontend's structure and 
         2.  Confirm ProjectM asset paths are correctly found and loaded.
         3.  Iteratively debug OpenGL rendering pipeline.
         4.  Refine Egui event handling if needed.
+*   **Investigation of `frontend-sdl2-rust` Example for `projectm-rs` Usage:**
+    *   **Initialization:** Uses `projectm::core::ProjectM::create()` for the main ProjectM object, wrapped in `Rc<ProjectM>`.
+    *   **Rendering Method:** The `ProjectM` object itself has a `render_frame()` method. The example calls `self.pm.render_frame()` directly in its main loop.
+    *   **Texture Handling:** The example does *not* show manual creation of an OpenGL texture in Rust and passing its ID to ProjectM. This implies `projectm::core::ProjectM::render_frame()` renders directly to the current OpenGL context's backbuffer.
+    *   **Audio:** Audio is handled by a separate `audio::Audio` module which receives the `Rc<ProjectM>` and presumably calls a PCM submission method (like `pcm_add_float`) on it.
+    *   **Conclusion:** The previous assumption in our code to render ProjectM to a separate texture and then draw that texture via a custom shader is likely incorrect and overly complicated based on this example. The `projectm-rs` crate (via `projectm::core::ProjectM`) seems to offer a simpler direct-to-backbuffer rendering path.
+*   **Simulated Build and Test (Post Rendering Refactor & Egui Event Handling Refinements):**
+    *   **Build Status:** More confident in `projectm::Core::render_frame()` based on the example. API for other `projectm::Core` methods (init, pcm, presets) still needs exact signature validation against `projectm-rs` v3.1.2. Egui event handling is now more robust but incomplete (keyboard/text input missing).
+    *   **Anticipated Runtime Issues:**
+        *   **ProjectM Rendering:** Higher chance of success if `projectm::Core::render_frame()` indeed renders to backbuffer as seen in the example. If not, this is still the primary failure point.
+        *   **Egui Interaction:** Mouse clicks should work. Lack of keyboard/text input will be noticeable if UI grows.
+        *   Asset path issues remain a potential runtime problem if paths aren't found.
+    *   **Key Next Steps (for actual debugging):**
+        1.  Confirm `projectm::Core::render_frame()` behavior with `projectm-rs` v3.1.2.
+        2.  Test Egui mouse interactions.
+        3.  Incrementally add more comprehensive event translation for Egui (keyboard, text, scroll).

@@ -65,3 +65,64 @@ pub fn get_placeholder_audio_buffer() -> Vec<f32> {
 pub fn init_audio() {
     init_audio_placeholder();
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_placeholder_audio_buffer_size() {
+        // Initialize explicitly for test context, as static init might not run otherwise
+        // or could be affected by other tests if run in parallel.
+        init_audio_placeholder();
+        let buffer = get_placeholder_audio_buffer();
+        assert_eq!(buffer.len(), BUFFER_SIZE_SAMPLES * CHANNELS as usize);
+    }
+
+    #[test]
+    fn test_get_placeholder_audio_buffer_values_in_range() {
+        init_audio_placeholder();
+        let buffer = get_placeholder_audio_buffer();
+        assert!(!buffer.is_empty(), "Buffer should not be empty");
+        for sample in buffer {
+            assert!(sample >= -1.0 && sample <= 1.0, "Sample value {} out of range [-1.0, 1.0]", sample);
+        }
+    }
+
+    #[test]
+    fn test_sine_wave_generator_continuity() {
+        let mut gen = SineWaveGenerator::new(1.0); // 1 Hz for simple phase checking
+        let mut last_val = gen.next_sample();
+        // Check a few samples to see if it's somewhat continuous (not jumping wildly)
+        // This is a very basic check.
+        for _ in 0..10 {
+            let current_val = gen.next_sample();
+            // Not a strict mathematical check, just ensuring it doesn't go from e.g. 0.5 to -0.5 in one step at low freq
+            // A proper check would involve looking at the derivative or expected values.
+            // For this placeholder, a simple bounds check for large discontinuities might be enough.
+            // However, with sine, it *can* change sign rapidly around zero.
+            // Let's just ensure it produces different values for a bit.
+            // println!("Sine: {}", current_val); // For manual inspection if needed
+            assert_ne!(current_val, last_val, "Generator should produce varying values over time for this test setup unless frequency is extremely low or high relative to SAMPLE_RATE.");
+            last_val = current_val;
+        }
+    }
+
+    #[test]
+    fn test_init_audio_placeholder_initializes_statics() {
+        // Reset statics for a clean test, if possible.
+        // This is tricky with static mut. A better design would avoid static mut for testability.
+        // For now, we assume other tests might have run init_audio_placeholder.
+        // We call it again to ensure it runs.
+        unsafe {
+            SINE_GENERATOR_L = None;
+            SINE_GENERATOR_R = None;
+        }
+        init_audio_placeholder();
+        unsafe {
+            assert!(SINE_GENERATOR_L.is_some());
+            assert!(SINE_GENERATOR_R.is_some());
+        }
+    }
+}

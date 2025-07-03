@@ -8,59 +8,67 @@ use crate::audio; // Import our audio module
 const INITIAL_WINDOW_WIDTH: u32 = 1280;
 const INITIAL_WINDOW_HEIGHT: u32 = 720;
 
-// Shader sources for rendering a texture
-const VS_SRC: &str = r#"#version 330 core
-    layout (location = 0) in vec2 aPos;
-    layout (location = 1) in vec2 aTexCoords;
+// Shader and quad rendering code removed as ProjectM is now assumed to render directly to backbuffer.
 
-    out vec2 TexCoords;
-
-    void main() {
-        gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);
-        TexCoords = aTexCoords;
+fn translate_sdl_mouse_button(button: &sdl2::mouse::MouseButton) -> Option<egui::PointerButton> {
+    match button {
+        sdl2::mouse::MouseButton::Left => Some(egui::PointerButton::Primary),
+        sdl2::mouse::MouseButton::Right => Some(egui::PointerButton::Secondary),
+        sdl2::mouse::MouseButton::Middle => Some(egui::PointerButton::Middle),
+        // sdl2::mouse::MouseButton::X1 => Some(egui::PointerButton::Extra1), // egui doesn't have X1/X2 directly
+        // sdl2::mouse::MouseButton::X2 => Some(egui::PointerButton::Extra2),
+        _ => None,
     }
-"#;
+}
 
-const FS_SRC: &str = r#"#version 330 core
-    out vec4 FragColor;
+pub fn resolve_asset_paths() -> Result<(String, String), String> {
+    // 1. Environment Variables
+    let preset_env_var = "PROJECTM_PRESET_PATH";
+    let texture_env_var = "PROJECTM_TEXTURE_PATH";
 
-    in vec2 TexCoords;
-
-    uniform sampler2D screenTexture;
-
-    void main() {
-        FragColor = texture(screenTexture, TexCoords);
-    }
-"#;
-
-
-unsafe fn create_shader_program(gl: &glow::Context, vs_src: &str, fs_src: &str) -> Result<glow::Program, String> {
-    let vs = gl.create_shader(glow::VERTEX_SHADER)?;
-    gl.shader_source(vs, vs_src);
-    gl.compile_shader(vs);
-    if !gl.get_shader_compile_status(vs) {
-        return Err(format!("Vertex shader compilation error: {}", gl.get_shader_info_log(vs)));
-    }
-
-    let fs = gl.create_shader(glow::FRAGMENT_SHADER)?;
-    gl.shader_source(fs, fs_src);
-    gl.compile_shader(fs);
-    if !gl.get_shader_compile_status(fs) {
-        return Err(format!("Fragment shader compilation error: {}", gl.get_shader_info_log(fs)));
+    if let (Ok(p_path_str), Ok(t_path_str)) = (env::var(preset_env_var), env::var(texture_env_var)) {
+        if Path::new(&p_path_str).is_dir() && Path::new(&t_path_str).is_dir() {
+            println!("Using asset paths from environment variables: {} and {}", p_path_str, t_path_str);
+            return Ok((p_path_str, t_path_str));
+        } else {
+            // Only return error if env vars are set but invalid. Otherwise, proceed to common paths.
+            if env::var(preset_env_var).is_ok() || env::var(texture_env_var).is_ok() {
+                 println!(
+                    "Warning: {} or {} environment variables set, but one or both paths are invalid.",
+                    preset_env_var, texture_env_var
+                );
+                return Err(format!(
+                    "Invalid asset paths from environment variables: {} or {} are invalid.",
+                    preset_env_var, texture_env_var
+                ));
+            }
+        }
     }
 
-    let program = gl.create_program()?;
-    gl.attach_shader(program, vs);
-    gl.attach_shader(program, fs);
-    gl.link_program(program);
-    if !gl.get_program_link_status(program) {
-        return Err(format!("Shader program linking error: {}", gl.get_program_info_log(program)));
+    // 2. Common Linux Paths
+    let common_paths_to_check = [
+        ("/usr/share/projectm", "presets", "textures"),
+        ("/usr/local/share/projectm", "presets", "textures"),
+        // Add more common paths for other OSs here if needed later
+    ];
+
+    for (base, preset_subdir, texture_subdir) in common_paths_to_check.iter() {
+        let p_path = Path::new(base).join(preset_subdir);
+        let t_path = Path::new(base).join(texture_subdir);
+        if p_path.is_dir() && t_path.is_dir() {
+            println!("Found common asset paths: {:?} and {:?}", p_path, t_path);
+            return Ok((
+                p_path.to_string_lossy().into_owned(),
+                t_path.to_string_lossy().into_owned(),
+            ));
+        }
     }
 
-    gl.delete_shader(vs);
-    gl.delete_shader(fs);
-
-    Ok(program)
+    // 3. Fallback: Error out
+    eprintln!("Could not find ProjectM preset/texture paths automatically.");
+    eprintln!("Please set {} and {} environment variables,", preset_env_var, texture_env_var);
+    eprintln!("or ensure projectM is installed in a standard location (e.g., /usr/share/projectm).");
+    Err("ProjectM asset paths not found.".to_string())
 }
 
 
@@ -87,121 +95,12 @@ pub fn run_application() -> Result<(), String> {
         glow::Context::from_loader_function(|s| video_subsystem.gl_get_proc_address(s) as *const _)
     };
 
-    // --- Shader and Quad for rendering ProjectM texture ---
-    let shader_program = unsafe { create_shader_program(&gl, VS_SRC, FS_SRC)? };
-
-    let quad_vertices: [f32; 24] = [
-        // positions   // texCoords
-        -1.0,  1.0,  0.0, 1.0,
-        -1.0, -1.0,  0.0, 0.0,
-         1.0, -1.0,  1.0, 0.0,
-
-        -1.0,  1.0,  0.0, 1.0,
-         1.0, -1.0,  1.0, 0.0,
-         1.0,  1.0,  1.0, 1.0,
-    ];
-
-    let vao = unsafe { gl.create_vertex_array()? };
-    let vbo = unsafe { gl.create_buffer()? };
-
-    unsafe {
-        gl.bind_vertex_array(Some(vao));
-        gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo));
-        let u8_slice = std::slice::from_raw_parts(
-            quad_vertices.as_ptr() as *const u8,
-            quad_vertices.len() * std::mem::size_of::<f32>(),
-        );
-        gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, u8_slice, glow::STATIC_DRAW);
-
-        // Position attribute
-        gl.vertex_attrib_pointer_f32(0, 2, glow::FLOAT, false, 4 * std::mem::size_of::<f32>() as i32, 0);
-        gl.enable_vertex_attrib_array(0);
-        // Texture coord attribute
-        gl.vertex_attrib_pointer_f32(1, 2, glow::FLOAT, false, 4 * std::mem::size_of::<f32>() as i32, (2 * std::mem::size_of::<f32>()) as i32);
-        gl.enable_vertex_attrib_array(1);
-        gl.bind_buffer(glow::ARRAY_BUFFER, None);
-        gl.bind_vertex_array(None);
-    }
-    // --- End Shader and Quad Setup ---
-
-    // --- ProjectM Texture Setup ---
-    let projectm_texture_id = unsafe { gl.create_texture()? };
-    unsafe {
-        gl.bind_texture(glow::TEXTURE_2D, Some(projectm_texture_id));
-        gl.tex_image_2d(
-            glow::TEXTURE_2D,
-            0,
-            glow::RGB as i32, // projectM usually renders RGB, check if RGBA is needed/better
-            INITIAL_WINDOW_WIDTH as i32,
-            INITIAL_WINDOW_HEIGHT as i32,
-            0,
-            glow::RGB,
-            glow::UNSIGNED_BYTE,
-            None, // No initial data
-        );
-        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::LINEAR as i32);
-        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::LINEAR as i32);
-        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE as i32);
-        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE as i32);
-        gl.bind_texture(glow::TEXTURE_2D, None);
-    }
-    // --- End ProjectM Texture Setup ---
-
+    // No longer creating a separate texture or shader for ProjectM,
+    // as it's assumed to render directly to the backbuffer.
 
     let mut egui_glow = egui_glow::EguiGlow::new(&window, &gl);
 
-    // --- Asset Path Resolution ---
-    let preset_path_str: String;
-    let texture_path_str: String;
-
-    // 1. Environment Variables
-    let preset_env = env::var("PROJECTM_PRESET_PATH");
-    let texture_env = env::var("PROJECTM_TEXTURE_PATH");
-
-    if let (Ok(p_path), Ok(t_path)) = (preset_env.as_ref(), texture_env.as_ref()) {
-        if Path::new(p_path).is_dir() && Path::new(t_path).is_dir() {
-            println!("Using asset paths from environment variables: {} and {}", p_path, t_path);
-            preset_path_str = p_path.clone();
-            texture_path_str = t_path.clone();
-        } else {
-            println!("Warning: PROJECTM_PRESET_PATH or PROJECTM_TEXTURE_PATH environment variables set, but paths are invalid.");
-            return Err("Invalid asset paths from environment variables.".to_string()); // Or fallback
-        }
-    } else {
-        // 2. Common Linux Paths
-        let common_paths = [
-            ("/usr/share/projectm", "presets", "textures"),
-            ("/usr/local/share/projectm", "presets", "textures"),
-        ];
-        let mut found_common = false;
-        let mut temp_preset_path = String::new();
-        let mut temp_texture_path = String::new();
-
-        for (base, preset_subdir, texture_subdir) in common_paths.iter() {
-            let p_path = Path::new(base).join(preset_subdir);
-            let t_path = Path::new(base).join(texture_subdir);
-            if p_path.is_dir() && t_path.is_dir() {
-                println!("Found common asset paths: {:?} and {:?}", p_path, t_path);
-                temp_preset_path = p_path.to_string_lossy().into_owned();
-                temp_texture_path = t_path.to_string_lossy().into_owned();
-                found_common = true;
-                break;
-            }
-        }
-
-        if found_common {
-            preset_path_str = temp_preset_path;
-            texture_path_str = temp_texture_path;
-        } else {
-            // 3. Fallback or Ask User (Simplified for now, returning error)
-            // In a real app, this is where you might request_user_input or use a config file.
-            eprintln!("Could not find ProjectM preset/texture paths automatically.");
-            eprintln!("Please set PROJECTM_PRESET_PATH and PROJECTM_TEXTURE_PATH environment variables,");
-            eprintln!("or ensure projectM is installed in a standard location (e.g., /usr/share/projectm).");
-            return Err("ProjectM asset paths not found.".to_string());
-        }
-    }
-    // --- End Asset Path Resolution ---
+    let (preset_path_str, texture_path_str) = resolve_asset_paths()?;
 
     // Initialize ProjectM
     let mut projectm_core = projectm::Core::new(preset_path_str,
@@ -220,11 +119,65 @@ pub fn run_application() -> Result<(), String> {
         let delta_time = now.duration_since(last_frame_time);
         last_frame_time = now;
 
-        egui_glow.begin_frame(&window); // Start Egui frame
+        let mut raw_input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(window.size().0 as f32, window.size().1 as f32) / egui_glow.pixels_per_point(),
+            )),
+            // TODO: Fill other fields like time, modifiers, etc.
+            ..Default::default()
+        };
 
         for event in event_pump.poll_iter() {
-            egui_glow.on_event(&event); // Pass event to Egui
+            // Manually translate SDL events to egui events and add to raw_input.events
+            // This is a simplified translation. A more complete one would handle more event types.
+            match &event {
+                Event::Quit { .. } => break 'running,
+                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => break 'running,
+                Event::MouseMotion { x, y, .. } => {
+                    raw_input.events.push(egui::Event::PointerMoved(egui::pos2(*x as f32, *y as f32)));
+                }
+                Event::MouseButtonDown { mouse_btn, x, y, .. } => {
+                    if let Some(button) = translate_sdl_mouse_button(mouse_btn) {
+                        raw_input.events.push(egui::Event::PointerButton {
+                            pos: egui::pos2(*x as f32, *y as f32),
+                            button,
+                            pressed: true,
+                            modifiers: egui::Modifiers::default(), // TODO: map SDL modifiers
+                        });
+                    }
+                }
+                Event::MouseButtonUp { mouse_btn, x, y, .. } => {
+                    if let Some(button) = translate_sdl_mouse_button(mouse_btn) {
+                        raw_input.events.push(egui::Event::PointerButton {
+                            pos: egui::pos2(*x as f32, *y as f32),
+                            button,
+                            pressed: false,
+                            modifiers: egui::Modifiers::default(), // TODO: map SDL modifiers
+                        });
+                    }
+                }
+                // TODO: Add Keyboard input (Key, Text), Scroll, etc.
+                // Event::KeyDown { keycode, keymod, .. } => { ... }
+                // Event::TextInput { text, .. } => { raw_input.events.push(egui::Event::Text(text.clone())); }
+                // Event::MouseWheel { x, y, .. } => { ... }
+
+                _ => {} // Other SDL events not handled for egui yet
+            }
+
+            // Handle non-egui SDL events (like window resize)
             match event {
+                Event::Window { win_event: sdl2::event::WindowEvent::Resized(w, h), .. } => {
+                    projectm_core.set_screen_size(w as u32, h as u32);
+                    unsafe {
+                        gl.viewport(0, 0, w, h);
+                    }
+                    // Update egui screen rect for next frame
+                    raw_input.screen_rect = Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(w as f32, h as f32) / egui_glow.pixels_per_point(),
+                    ));
+                }
                 Event::Quit { .. }
                 | Event::KeyDown {
                     keycode: Some(Keycode::Escape),
@@ -235,14 +188,7 @@ pub fn run_application() -> Result<(), String> {
                     projectm_core.set_screen_size(w as u32, h as u32);
                     unsafe {
                         gl.viewport(0, 0, w, h);
-                        // Update texture size if projectM renders to our texture
-                        gl.bind_texture(glow::TEXTURE_2D, Some(projectm_texture_id));
-                        gl.tex_image_2d(
-                            glow::TEXTURE_2D, 0, glow::RGB as i32,
-                            w as i32, h as i32, 0,
-                            glow::RGB, glow::UNSIGNED_BYTE, None
-                        );
-                        gl.bind_texture(glow::TEXTURE_2D, None);
+                        // No longer need to update our own texture for ProjectM
                     }
                 }
                 _ => {}
@@ -251,100 +197,53 @@ pub fn run_application() -> Result<(), String> {
 
         // Feed placeholder audio data to ProjectM
         let audio_data = audio::get_placeholder_audio_buffer();
-        // The projectm-rs API seems to be `pcm_add_float(data: &[f32])`
-        // The C API takes (PCM, L_Chan, R_Chan, num_samples)
-        // The `frontend-sdl2-rust` example uses `self.projectm.pcm_add_float(&p);`
-        // where p is a slice of f32. This implies interleaved stereo data.
-        // Our `get_placeholder_audio_buffer` provides this.
         projectm_core.pcm_add_float(&audio_data);
 
-
-        // Render projectM to texture
-        // The actual method name in projectm-rs might be different, e.g., `render_to_texture_gl`.
-        // This assumes projectM internally uses the currently bound FBO or renders to a texture ID we provide.
-        // The `frontend-sdl2-rust` example does: `self.projectm.render_frame_to_texture(&mut self.texture_id);`
-        // This implies projectm-rs can take a mutable reference to our texture ID.
-        // However, the `projectm::Core::new` doesn't take a texture ID.
-        // The C API projectM_RenderFrame uses the currently bound FBO.
-        // Let's assume for now `render_frame_to_texture` is available and works with our texture_id.
-        // This is a BIG assumption and likely needs adjustment based on `projectm-rs` specific API.
-        // A more robust way would be to create an FBO, attach projectm_texture_id, bind FBO, call render, unbind FBO.
-
-        // For now, let's assume projectm::Core has a method that implies rendering to *its own* internal texture,
-        // and we need a way to get that texture's data or ID.
-        // OR, it might directly render to the currently bound framebuffer if no texture is specified.
-        // The `frontend-sdl2-rust` example's `render_frame_to_texture` is the best lead.
-        // It seems `projectm::Renderer` is the key in that example. Our `Core` might be too high level or different.
-        // Digging into `projectm-rs` source or its `Renderer` example would be needed.
-        // Let's try to call a generic render_frame and then assume it has rendered to *some* state
-        // that we can then draw. This part is highly speculative without testing.
-        projectm_core.render_frame(); // This is a guess from the C API.
-
-        // Clear the main framebuffer
+        // Clear the main framebuffer (optional, projectM might overwrite fully)
         unsafe {
-            gl.clear_color(0.0, 0.0, 0.0, 1.0); // Clear to black
+            gl.clear_color(0.1, 0.1, 0.1, 1.0); // Slightly different clear color for distinction
             gl.clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
         }
 
-        // Draw the ProjectM texture to a full-screen quad
-        // This step assumes projectM has rendered to `projectm_texture_id`
-        // or that `render_frame()` makes its output available through some default texture binding.
-        // This part is also speculative. If projectM renders directly to backbuffer, this quad drawing might not be needed
-        // or would draw over it. If it renders to a texture, this is how we'd display it.
-        unsafe {
-            gl.use_program(Some(shader_program));
-            gl.active_texture(glow::TEXTURE0);
-            // This is the critical assumption: that projectm_texture_id now holds projectM's output.
-            // Or if projectM has its own texture, we'd need `projectm_core.get_output_texture_id()`
-            gl.bind_texture(glow::TEXTURE_2D, Some(projectm_texture_id));
-            gl.uniform_1_i32(gl.get_uniform_location(shader_program, "screenTexture").as_ref(), 0);
+        // Render projectM directly to the backbuffer
+        projectm_core.render_frame();
 
-            gl.bind_vertex_array(Some(vao));
-            gl.draw_arrays(glow::TRIANGLES, 0, 6);
-            gl.bind_vertex_array(None);
-            gl.use_program(None);
-        }
-
-
-        // Egui UI construction
-        egui_glow.begin_frame(&window); // Egui should be started before its drawing
-        egui::CentralPanel::default().show(egui_glow.ctx(), |ui| {
-            ui.label("Project Aurora Visualizer");
-            ui.separator();
-            if ui.button("Next Preset").clicked() {
-                if let Err(e) = projectm_core.select_next() {
-                    eprintln!("Failed to select next preset: {:?}", e);
-                } else {
-                    println!("Switched to next preset.");
+        // Run Egui frame
+        let egui_output = egui_glow.egui_ctx.run(raw_input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.label("Project Aurora Visualizer");
+                ui.separator();
+                if ui.button("Next Preset").clicked() {
+                    if let Err(e) = projectm_core.select_next() {
+                        eprintln!("Failed to select next preset: {:?}", e);
+                    } else {
+                        println!("Switched to next preset.");
+                    }
                 }
-            }
-            if ui.button("Previous Preset").clicked() { // Added for completeness
-                if let Err(e) = projectm_core.select_prev() {
-                    eprintln!("Failed to select previous preset: {:?}", e);
-                } else {
-                    println!("Switched to previous preset.");
+                if ui.button("Previous Preset").clicked() { // Added for completeness
+                    if let Err(e) = projectm_core.select_prev() {
+                        eprintln!("Failed to select previous preset: {:?}", e);
+                    } else {
+                        println!("Switched to previous preset.");
+                    }
                 }
-            }
-            if ui.button("Random Preset").clicked() { // Added for completeness
-                if let Err(e) = projectm_core.select_random() {
-                    eprintln!("Failed to select random preset: {:?}", e);
-                } else {
-                    println!("Switched to random preset.");
+                if ui.button("Random Preset").clicked() { // Added for completeness
+                    if let Err(e) = projectm_core.select_random() {
+                        eprintln!("Failed to select random preset: {:?}", e);
+                    } else {
+                        println!("Switched to random preset.");
+                    }
                 }
-            }
-            ui.label(format!("FPS: {:.1}", 1.0 / delta_time.as_secs_f32()));
+                ui.label(format!("FPS: {:.1}", 1.0 / delta_time.as_secs_f32()));
+            });
         });
-        // End Egui frame and prepare paint data
-        let (_output, paint_commands) = egui_glow.end_frame(&window);
-        let paint_jobs = egui_glow.ctx().tessellate(paint_commands);
 
+        // TODO: Handle egui_output.platform_output (e.g., clipboard, text cursor shape)
 
-        // Render Egui (was egui_glow.paint(&window, &gl);)
+        let paint_jobs = egui_glow.egui_ctx.tessellate(egui_output.shapes, egui_output.pixels_per_point);
+
         unsafe {
-            // egui_glow.paint_jobs(&window, &gl, paint_jobs); // This is often the method
-            // For egui_glow 0.27.2 with glow 0.13, it's likely:
             egui_glow.paint_glow(&window, &gl, paint_jobs);
-
         }
 
 
@@ -353,12 +252,109 @@ pub fn run_application() -> Result<(), String> {
     }
 
     // Cleanup
-    unsafe {
-        gl.delete_program(shader_program);
-        gl.delete_vertex_array(vao);
-        gl.delete_buffer(vbo);
-        gl.delete_texture(projectm_texture_id);
-    }
+    // No longer deleting shader_program, vao, vbo, projectm_texture_id as they are removed.
     egui_glow.destroy(&gl);
     Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    // Helper to set up mock directories for testing Path::is_dir()
+    // This is still somewhat integration-testy as it touches filesystem.
+    // For pure unit tests of logic, one might need to inject a "filesystem" trait.
+    fn setup_mock_dirs(base_path: &Path, preset_subdir: &str, texture_subdir: &str) -> (String, String) {
+        let preset_dir = base_path.join(preset_subdir);
+        let texture_dir = base_path.join(texture_subdir);
+        fs::create_dir_all(&preset_dir).unwrap();
+        fs::create_dir_all(&texture_dir).unwrap();
+        (preset_dir.to_string_lossy().into_owned(), texture_dir.to_string_lossy().into_owned())
+    }
+
+    #[test]
+    fn test_resolve_asset_paths_env_vars_valid() {
+        let temp_dir = tempdir().unwrap();
+        let (mock_preset_path, mock_texture_path) = setup_mock_dirs(temp_dir.path(), "presets_env", "textures_env");
+
+        env::set_var("PROJECTM_PRESET_PATH", &mock_preset_path);
+        env::set_var("PROJECTM_TEXTURE_PATH", &mock_texture_path);
+
+        let result = resolve_asset_paths();
+        assert!(result.is_ok());
+        let (presets, textures) = result.unwrap();
+        assert_eq!(presets, mock_preset_path);
+        assert_eq!(textures, mock_texture_path);
+
+        env::remove_var("PROJECTM_PRESET_PATH");
+        env::remove_var("PROJECTM_TEXTURE_PATH");
+        // temp_dir and its contents are automatically cleaned up
+    }
+
+    #[test]
+    fn test_resolve_asset_paths_env_vars_invalid_preset() {
+        let temp_dir = tempdir().unwrap();
+        let (_mock_preset_path_real, mock_texture_path) = setup_mock_dirs(temp_dir.path(), "presets_env_inv", "textures_env_inv");
+        let invalid_preset_path = temp_dir.path().join("non_existent_presets");
+
+        env::set_var("PROJECTM_PRESET_PATH", invalid_preset_path.to_string_lossy().as_ref());
+        env::set_var("PROJECTM_TEXTURE_PATH", &mock_texture_path);
+
+        let result = resolve_asset_paths();
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Invalid asset paths from environment variables: PROJECTM_PRESET_PATH or PROJECTM_TEXTURE_PATH are invalid.");
+
+        env::remove_var("PROJECTM_PRESET_PATH");
+        env::remove_var("PROJECTM_TEXTURE_PATH");
+    }
+
+    #[test]
+    fn test_resolve_asset_paths_env_vars_invalid_texture() {
+        let temp_dir = tempdir().unwrap();
+        let (mock_preset_path, _mock_texture_path_real) = setup_mock_dirs(temp_dir.path(), "presets_env_inv2", "textures_env_inv2");
+        let invalid_texture_path = temp_dir.path().join("non_existent_textures");
+
+        env::set_var("PROJECTM_PRESET_PATH", &mock_preset_path);
+        env::set_var("PROJECTM_TEXTURE_PATH", invalid_texture_path.to_string_lossy().as_ref());
+
+        let result = resolve_asset_paths();
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Invalid asset paths from environment variables: PROJECTM_PRESET_PATH or PROJECTM_TEXTURE_PATH are invalid.");
+
+        env::remove_var("PROJECTM_PRESET_PATH");
+        env::remove_var("PROJECTM_TEXTURE_PATH");
+    }
+
+    #[test]
+    fn test_resolve_asset_paths_no_env_fallback_to_error() {
+        // Ensure env vars are not set
+        env::remove_var("PROJECTM_PRESET_PATH");
+        env::remove_var("PROJECTM_TEXTURE_PATH");
+
+        // This test assumes common paths like /usr/share/projectm do NOT exist
+        // or are not relevant in the test environment. This is a limitation.
+        // For a CI environment, these paths would typically not exist.
+        let result = resolve_asset_paths();
+        // If common paths *do* exist on the system running the test, this will fail.
+        // To make it robust, you'd mock `Path::is_dir` or run in a very controlled env.
+        // For now, we expect it to error if common paths aren't found.
+        if !Path::new("/usr/share/projectm/presets").is_dir() && !Path::new("/usr/local/share/projectm/presets").is_dir() {
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err(), "ProjectM asset paths not found.");
+        } else {
+            // If common paths ARE found, then it should be Ok.
+            // This part makes the test dependent on the environment.
+            assert!(result.is_ok(), "Test assumes no common paths, but found some: {:?}", result.ok());
+        }
+    }
+
+    // Note: Testing the "common paths" logic directly is hard in unit tests
+    // without mocking `Path::is_dir` or actually creating those directories
+    // in system locations, which is not feasible for typical unit tests.
+    // The `test_resolve_asset_paths_no_env_fallback_to_error` indirectly covers
+    // the case where common paths are not found.
+    // A true integration test would be needed to confirm common path discovery on target systems.
 }
