@@ -97,3 +97,27 @@ This section outlines the initial thoughts on the Rust frontend's structure and 
     *   Investigated `projectm-rs` (crate name `projectm` on crates.io, version 3.1.2).
     *   Decision: Adopt the `projectm` crate. This simplifies development by providing safe Rust bindings to `libprojectM`, eliminating the need for manual FFI binding generation (`bindgen`) for this core component.
     *   Updated `README.md` Phase 1 tasks to reflect using the `projectm` crate.
+*   **Asset Path Handling for ProjectM:**
+    *   Implemented logic in `gui::run_application` to determine paths for ProjectM presets and textures.
+    *   Strategy:
+        1.  Check environment variables: `PROJECTM_PRESET_PATH` and `PROJECTM_TEXTURE_PATH`.
+        2.  If not found, check common Linux default locations: `/usr/share/projectm/...` and `/usr/local/share/projectm/...`.
+        3.  If still not found, the application currently errors out with a message to the user. (Future improvement: prompt user or use a config file).
+*   **Simulated Build and Test (Post Initial Rendering/Audio/Preset Implementation):**
+    *   **Anticipated Build Issues:**
+        *   Potential API mismatches with the `projectm` crate (v3.1.2), especially regarding:
+            *   `Core::new()` signature and error type.
+            *   `Core::render_frame()` - this is highly speculative. The `frontend-sdl2-rust` example uses a `projectm::Renderer` object and its `render_frame_to_texture(&mut texture_id)` method. The current code might need significant changes to align with the correct rendering approach in `projectm-rs`.
+            *   PCM data submission method (`pcm_add_float`) and its exact signature.
+            *   Preset switching methods (`select_next`, `select_prev`, `select_random`) and their error types.
+        *   `egui-glow` event handling: Direct use of `egui_glow.on_event(&sdl_event)` might be insufficient; an adapter like `egui-sdl2-event` could be necessary for proper event translation.
+        *   OpenGL state and shader correctness: Standard potential for bugs in GL calls or shader logic.
+    *   **Anticipated Runtime Issues:**
+        *   **ProjectM Not Rendering / Black Screen:** Most likely issue due to the speculative `render_frame()` call. The method for ProjectM to render to the designated texture (`projectm_texture_id`) needs verification against `projectm-rs` examples/docs.
+        *   Incorrect asset paths leading to ProjectM initialization failure.
+        *   Egui UI not rendering or interacting correctly if event translation is flawed.
+    *   **Key Next Steps (for actual debugging):**
+        1.  **Verify `projectm-rs` Rendering API:** Consult `projectm-rs` examples (especially `frontend-sdl2-rust`) and documentation to correctly use its rendering capabilities (e.g., `projectm::Renderer`, FBOs, texture output methods). This is the highest priority.
+        2.  Confirm ProjectM asset paths are correctly found and loaded.
+        3.  Iteratively debug OpenGL rendering pipeline.
+        4.  Refine Egui event handling if needed.

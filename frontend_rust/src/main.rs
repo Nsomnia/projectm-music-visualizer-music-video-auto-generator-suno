@@ -14,7 +14,7 @@ fn main() -> Result<(), String> {
     // Initialize components (placeholders for now)
     cli::parse_arguments();
     config::load_config();
-    // audio::init_audio(); // Will be handled by the GUI/main loop for now
+    audio::init_audio(); // Initialize placeholder audio system
 
     match gui::run_application() {
         Ok(_) => println!("Project Aurora exited cleanly."),
