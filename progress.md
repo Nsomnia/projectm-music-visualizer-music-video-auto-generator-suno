@@ -48,19 +48,30 @@ This section outlines the initial thoughts on the Rust frontend's structure and 
     ```
 
 *   **Key Rust Crates Under Consideration:**
-    *   **GUI Framework:**
-        *   `iced`: Data-centric, Elm-inspired, good for custom UIs.
-        *   `egui`: Easy-to-use immediate mode GUI, good for rapid development and integration.
-        *   `druid`: Data-oriented, native-looking widgets, strong focus on correctness.
-        *   `tauri`: Allows using web technologies (HTML, CSS, JS) for UI, with Rust backend. (Might be heavier than needed if a pure Rust GUI is preferred).
-        *   *Decision on GUI framework will be made after further evaluation based on projectM integration needs and desired UI complexity.*
+    *   **GUI Framework: `egui` (with SDL2 for windowing/OpenGL context)**
+        *   **Decision:** `egui` has been selected.
+        *   **Rationale:**
+            *   Leverages `sdl2` crate for windowing, input, and OpenGL context, aligning with the `frontend-sdl2-rust` example for `projectm` integration. This provides a clear path for rendering projectM visuals.
+            *   `egui` is well-suited for rapid development of custom UIs and can be easily overlaid or integrated with an OpenGL application.
+            *   Crates like `egui_sdl2_gl` (or `egui_sdl2_event` + `egui-glow`) can facilitate this integration.
+            *   Good balance of ease-of-use, flexibility for extensive configuration options, and performance.
+        *   Other options considered: `iced`, `druid`, `tauri`.
+    *   **Windowing/OpenGL Context:**
+        *   `sdl2`: Will be used for creating the window, handling events, and setting up the OpenGL context required by projectM and `egui-glow`.
     *   **Audio Playback & Processing:**
         *   `rodio`: Simple audio playback.
         *   `cpal`: Low-level audio I/O, good for capturing system audio or specific inputs.
         *   `kira`: Higher-level game audio library, might be useful for advanced effects or sequencing if needed.
     *   **projectM Integration:**
-        *   `libloading`: For dynamically loading `libprojectM`.
-        *   `bindgen`: For generating Rust FFI bindings from C/C++ headers of `libprojectM`. This would likely be part of a `build.rs` script.
+        *   **`projectm` crate (version 3.1.2 on crates.io):** This is the chosen crate.
+            *   Provides safe Rust bindings for `libprojectM`.
+            *   Maintained by `projectM-visualizer` organization.
+            *   Relies on `projectm-sys` for underlying FFI.
+            *   Example usage available at `https://github.com/projectM-visualizer/frontend-sdl2-rust`.
+            *   Documentation coverage on `docs.rs` is low (~11%), so the example project will be a key reference.
+            *   License: LGPL (GitHub shows 2.1, docs.rs shows 3.0-or-later).
+        *   ~~`libloading`: For dynamically loading `libprojectM`.~~ (Not needed if using `projectm` crate)
+        *   ~~`bindgen`: For generating Rust FFI bindings from C/C++ headers of `libprojectM`.~~ (Not needed if using `projectm` crate)
     *   **Video Recording:**
         *   `ffmpeg-next`: Comprehensive Rust bindings for FFmpeg. Allows for encoding video and audio.
         *   Alternatively, direct `std::process::Command` calls to the `ffmpeg` CLI tool if finer control or simpler integration is initially preferred.
@@ -82,3 +93,7 @@ This section outlines the initial thoughts on the Rust frontend's structure and 
 *   **Initial Setup:**
     *   Created `progress.md` to track project status and decisions.
     *   Updated `README.md` to reflect the new Rust-based frontend plan and incorporate detailed user requirements into the project roadmap.
+*   **projectM Integration Strategy:**
+    *   Investigated `projectm-rs` (crate name `projectm` on crates.io, version 3.1.2).
+    *   Decision: Adopt the `projectm` crate. This simplifies development by providing safe Rust bindings to `libprojectM`, eliminating the need for manual FFI binding generation (`bindgen`) for this core component.
+    *   Updated `README.md` Phase 1 tasks to reflect using the `projectm` crate.

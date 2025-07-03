@@ -60,13 +60,13 @@ This roadmap outlines the planned development phases for the new Rust-based fron
 
 ### Phase 1: Core ProjectM Integration & Basic GUI (Rust)
 
-*   **Goal:** Establish a foundational Rust application that can host and render projectM visualizations.
+*   **Goal:** Establish a foundational Rust application that can host and render projectM visualizations using the `projectm` crate.
 *   **Tasks:**
-    *   Set up Rust project structure.
+    *   Set up Rust project structure (`frontend_rust` directory, `Cargo.toml`).
     *   Choose a GUI framework (e.g., Iced, Egui, Druid, Tauri) and implement a basic window.
-    *   Develop FFI (Foreign Function Interface) bindings to `libprojectM`.
-    *   Integrate projectM rendering into the Rust GUI window.
-    *   Implement basic audio input selection and playback (e.g., using `rodio` or `cpal`).
+    *   Integrate the `projectm` crate for `libprojectM` interaction (replaces manual FFI binding development).
+    *   Integrate projectM rendering into the Rust GUI window, using an OpenGL context provided/managed by the GUI framework or a compatible library.
+    *   Implement basic audio input selection and playback (e.g., using `rodio` or `cpal`), feeding audio data to `projectm`.
     *   Ensure visualizations react to live audio.
     *   Basic preset switching (next/previous random).
 
