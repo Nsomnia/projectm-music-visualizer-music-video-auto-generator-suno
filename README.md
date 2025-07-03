@@ -1,94 +1,128 @@
-# Project Aurora
+# Project Aurora (Rust Frontend Branch)
 
-A highly-customizable desktop GUI audio visualizer designed for musicians and content creators to generate unique, audio-reactive music videos.
+A highly-customizable desktop GUI audio visualizer, built with Rust, designed for musicians and content creators to generate unique, audio-reactive music videos. This branch focuses on developing a new frontend in Rust, aiming to provide a robust and modern user experience.
 
 ![placeholder](https://i.imgur.com/gY8g4i2.png) <!-- Placeholder image -->
 
 ---
 
-## Core Features (Current)
+## Core Vision
 
-*   **Real-time Audio Visualization:** Renders classic and modern MilkDrop-style presets using the projectM engine.
-*   **Audio-Reactive:** Visualizations react dynamically to the frequency and beat of the currently playing audio.
-*   **Wide Audio Format Support:** Plays `.mp3`, `.wav`, and `.flac` audio files via a simple menu.
-*   **Full Keyboard Control:**
-    *   `N` key: Switch to the next random preset.
-    *   `P` key: Switch to the previously viewed preset (up to 20 presets of history).
-*   **Debug & Testing Mode:** A command-line flag (`-d` or `--default-preset`) allows for starting with a consistent, non-random preset for predictable testing.
+Project Aurora aims to be a premier tool for creating captivating music visualizations. The Rust frontend will offer:
+
+*   **Real-time Audio Visualization:** Leveraging the power of the projectM engine for stunning MilkDrop-style visuals.
+*   **Intuitive GUI:** A user-friendly interface built in Rust for controlling all aspects of the visualization.
+*   **Music Playback:** Support for various audio formats.
+*   **Video Recording:** Built-in capabilities to record the visualizations as video files.
+*   **Deep Customization:** Extensive options to tweak visual parameters, effects, and more, all configurable through the GUI.
+*   **Persistent Settings:** User configurations will be saved and loaded, allowing for personalized experiences.
+*   **Automation:** Control via both command-line arguments for scripting and directly through the GUI for interactive sessions.
 
 ---
 
-## Prerequisites (Arch Linux)
+## Current C++ Version Features (Reference)
 
-The application relies on a few key system packages.
+The existing C++ version (on `master` branch) includes:
+*   Real-time audio visualization with projectM.
+*   Dynamic audio reactivity.
+*   Support for `.mp3`, `.wav`, `.flac`.
+*   Keyboard controls for preset switching.
+*   A debug mode for consistent preset testing.
 
+---
+
+## Prerequisites (Rust Frontend - Anticipated)
+
+The Rust frontend will have its own set of dependencies. These will be detailed as development progresses. Core system dependencies for `projectM` itself will likely still be required.
+
+For `projectM` (example for Arch Linux):
 ```bash
-sudo pacman -S --needed git make gcc cmake qt6-base projectm
+sudo pacman -S --needed projectm
+```
+
+Rust Development Environment:
+```bash
+# Instructions for installing Rust (e.g., via rustup) will be added here.
+# curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
 ---
 
-## Build & Run Instructions
+## Build & Run Instructions (Rust Frontend - To Be Developed)
 
-A `Makefile` is provided to simplify the build process.
-
-1.  **Clone the repository:**
-    ```bash
-    git clone <your-repo-url>
-    cd <your-repo-directory>
-    ```
-
-2.  **Build the application:**
-    This will configure the project (if needed) and compile the source code.
-    ```bash
-    make
-    ```
-
-3.  **Run the application:**
-
-    *   **Standard Mode (Random Presets):**
-        ```bash
-        ./build/AuroraVisualizer
-        ```
-
-    *   **Debug Mode (Fixed Preset):**
-        ```bash
-        ./build/AuroraVisualizer --default-preset
-        # or
-        ./build/AuroraVisualizer -d
-        ```
-
-4.  **Other Commands:**
-    *   `make test`: Builds and runs the test suite.
-    *   `make clean`: Removes all build artifacts.
-    *   `make help`: Shows all available commands.
+Instructions for building and running the Rust frontend will be provided here once the initial framework is in place. This will likely involve standard Rust tooling (`cargo build`, `cargo run`).
 
 ---
 
-## Future Development Roadmap
+## Project Roadmap: Rust Frontend Development
 
-This project aims to become a complete solution for automated music video production. The following features are planned for future development phases.
+This roadmap outlines the planned development phases for the new Rust-based frontend.
 
-### Phase 2: Text & Animation Engine
-*   **Layer-Based Compositor:** Implement a rendering pipeline where the projectM visualizer is one layer, and text elements are rendered into a separate, transparent overlay layer.
-*   **High-Quality Text Rendering:** Integrate the FreeType library to render custom fonts for artist names, track titles, and other information.
-*   **Dynamic Text Animation:**
-    *   Create a state machine to manage text animations over the duration of a song.
-    *   **Intro:** Text starts centered and fully opaque.
-    *   **Main Sequence:** Text fades to partial transparency and begins moving/bouncing around the screen, reacting to the music.
-    *   **Outro:** Text returns to the center and fades back to full opacity before the song ends.
-*   **Static Overlays:** Add an option to display a static, small-text URL (e.g., for a social media channel) in a corner of the screen.
+### Phase 1: Core ProjectM Integration & Basic GUI (Rust)
 
-### Phase 3: Automation & Recording
-*   **Video Recording:** Integrate `FFmpeg` to record the final composited output (visualizer + text overlays) and the source audio into a high-quality video file (`.mp4`).
-*   **Configuration & Scripting:**
-    *   Expand command-line options to control all aspects of a video render (input audio, output video, text content, fonts, colors, etc.).
-    *   Add support for a configuration file (`config.json` or similar) to manage persistent settings.
-*   **Batch Processing:** Enable a fully automated workflow where the application can be scripted to process an entire directory of songs, generating a unique video for each one based on a template.
+*   **Goal:** Establish a foundational Rust application that can host and render projectM visualizations.
+*   **Tasks:**
+    *   Set up Rust project structure.
+    *   Choose a GUI framework (e.g., Iced, Egui, Druid, Tauri) and implement a basic window.
+    *   Develop FFI (Foreign Function Interface) bindings to `libprojectM`.
+    *   Integrate projectM rendering into the Rust GUI window.
+    *   Implement basic audio input selection and playback (e.g., using `rodio` or `cpal`).
+    *   Ensure visualizations react to live audio.
+    *   Basic preset switching (next/previous random).
 
-### Phase 4: Advanced Features
-*   **Karaoke-Style Lyrics:** Integrate a speech-to-text engine (like a local Whisper model) to pre-process songs and generate timed lyric data. The text engine will then display these lyrics in sync with the music.
-*       **suno.com Integration:** Pull mp3's, maybe flac if possible, using already developed projects code on github which also dumps the raw url to parse for the  lyrics from each songs  https://suno.com/four-part-sondid-string source for each song to aide in the speech recognition, especially for songs with wild or unaudible voacls. Ideally would allow to rename songs that havnt got a proper name yet.
-*   **Custom Shader Support:** Allow users to write their own GLSL shaders for text effects and post-processing, enabling highly complex and unique animations.
-*   **Community Integration:** Build a system for users to easily share and download visualizer presets, text animation templates, and color schemes.
+### Phase 2: Enhanced GUI, Configuration & Control
+
+*   **Goal:** Build out the GUI to allow comprehensive control over projectM and visualization parameters.
+*   **Tasks:**
+    *   Design and implement GUI elements for:
+        *   Audio source selection (file, input device).
+        *   Preset selection and management (browsing, searching, favoriting).
+        *   Configuration of projectM parameters (e.g., beat sensitivity, texture size).
+        *   Access to all tweakable visual settings that projectM exposes.
+    *   Implement a system for saving and loading user configurations persistently (e.g., using `serde` with TOML or JSON files).
+    *   Refine keyboard and mouse controls for interaction.
+
+### Phase 3: Recording & Automation
+
+*   **Goal:** Enable users to record their visualizations and automate the creation process.
+*   **Tasks:**
+    *   Integrate video recording functionality (e.g., using `ffmpeg-next` or direct FFmpeg CLI calls) to capture the visual output and audio.
+        *   Allow selection of output format, resolution, and quality.
+    *   Develop a command-line interface (CLI) using a crate like `clap` for:
+        *   Loading specific audio files.
+        *   Selecting specific presets or cycling modes.
+        *   Starting/stopping recording.
+        *   Applying saved configurations.
+        *   Output file specification.
+    *   Ensure CLI options map to GUI configurable parameters, allowing for scripted automation of video generation.
+
+### Phase 4: Text & Animation Engine (Port or Re-implement in Rust)
+
+*   **Goal:** Incorporate dynamic text overlays and animations, similar to the original C++ roadmap, but implemented or integrated within the Rust ecosystem.
+*   **Tasks:**
+    *   **Layer-Based Compositor:** Design a rendering pipeline in Rust where projectM is one layer, and text/graphics are composited on top.
+    *   **High-Quality Text Rendering:** Integrate a Rust text rendering solution (e.g., `rusttype`, `glyphon`, or a GUI framework's built-in capabilities).
+    *   **Dynamic Text Animation:**
+        *   State machine for text animations (intro, main, outro).
+        *   Text movement and effects, potentially audio-reactive.
+    *   **Static Overlays:** Option for static text (e.g., URLs).
+
+### Phase 5: Advanced Features & Polish
+
+*   **Goal:** Add cutting-edge features and refine the user experience.
+*   **Tasks:**
+    *   **Karaoke-Style Lyrics:**
+        *   Investigate Rust libraries or bindings for speech-to-text (e.g., local Whisper model via FFI or Rust-native alternatives if available).
+        *   Integrate with suno.com lyric sources as described in the original C++ roadmap, adapting tools for Rust.
+        *   Timed lyric display.
+    *   **Custom Shader Support (Rust context):** Explore how users could provide custom shaders (e.g., WGSL if using `wgpu` directly or via a GUI framework, or GLSL if OpenGL context is managed).
+    *   **Community Integration:** System for sharing/downloading presets, animation templates, color schemes.
+    *   **Performance Optimization:** Profile and optimize the Rust application for smooth performance.
+    *   **Cross-Platform Compatibility:** Test and ensure functionality across major operating systems (Linux, Windows, macOS).
+    *   **Comprehensive Documentation:** User guides and developer documentation.
+
+---
+
+This README will be updated as the project progresses on this `rust-frontend` branch.
+For the original C++ project, please refer to the `master` branch.
 ```
